@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Completar Pago | Conti-GO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<header class="navbar">
+  <div class="container navbar-inner">
+    <a href="index.html" class="logo"><span class="logo-mark"></span>Conti<span class="accent">-GO</span></a>
+    <nav class="nav-links">
+      <a href="index.html">← Volver al catálogo</a>
+    </nav>
+    <div class="navbar-actions">
+      <span id="adminBadge" class="admin-badge hidden">Admin</span>
+      <span id="paidBadge" class="paid-badge hidden">Acceso activo</span>
+      <button id="btnLogout" class="btn btn-outline btn-sm hidden">Cerrar Sesión</button>
+    </div>
+  </div>
+</header>
+
+<section class="section-border" style="padding-top:64px">
+  <div class="container pago-inner">
+
+    <div class="pago-visual qr-card">
+      <div class="mock-ribbon">PAGO POR YAPE</div>
+      <div class="qr-frame" id="qrFrame">
+        <img id="qrImage" alt="Código QR de pago" class="hidden">
+        <div id="qrPlaceholder" class="qr-placeholder">
+          <span>El administrador aún no ha subido un QR de pago.</span>
+        </div>
+      </div>
+      <p class="qr-caption">Escanea este código QR con tu app <strong>Yape</strong> (o Plin / tu banco) y realiza la transferencia por el monto exacto de tu suscripción mensual.</p>
+
+      <div id="adminQrPanel" class="admin-qr-panel hidden">
+        <label class="hint">Panel de administrador · actualizar QR</label>
+        <input type="file" id="qrFileInput" accept="image/*">
+        <button class="btn btn-secondary btn-sm full" id="btnUploadQr" type="button">Subir nuevo QR</button>
+      </div>
+    </div>
+
+    <div class="pago-info">
+      <span class="eyebrow">/ Inversión</span>
+      <h2>Completa tu <span class="accent-italic">pago</span></h2>
+      <p id="courseSummary">Estás a punto de obtener acceso a Conti-GO.</p>
+
+      <div class="price" style="margin-bottom:22px">
+        <div><span class="currency">S/</span><span class="amount" id="amountLabel">19</span><span class="cents">.90</span><p class="price-label">Suscripción mensual</p></div>
+      </div>
+
+      <div id="paymentFormWrap">
+        <label class="hint" style="display:block;margin-bottom:8px">Número de operación o referencia (opcional)</label>
+        <input type="text" id="paymentNote" placeholder="Ej: Yape - Operación 004521" class="pago-input">
+        <button class="btn btn-primary full" id="btnConfirmPayment" style="margin-top:16px">Ya realicé el pago →</button>
+        <p class="hint" style="margin-top:14px">Tu acceso se activa automáticamente en cuanto el equipo de Conti-GO confirme la transferencia. Normalmente toma minutos.</p>
+      </div>
+
+      <div id="paymentSentState" class="payment-sent hidden">
+        <div class="payment-sent-icon">✓</div>
+        <h3>¡Listo! Enviamos tu comprobante</h3>
+        <p>El administrador confirmará tu pago y tu acceso a la biblioteca de masterclasses se activará automáticamente.</p>
+        <a href="hub.html" class="btn btn-secondary" style="margin-top:18px">Ir a mi biblioteca →</a>
+      </div>
+
+      <div id="alreadyPaidState" class="payment-sent hidden">
+        <div class="payment-sent-icon">★</div>
+        <h3>Ya tienes acceso activo</h3>
+        <p>Puedes entrar directamente a tu biblioteca de masterclases.</p>
+        <a href="hub.html" class="btn btn-primary" style="margin-top:18px">Ir a mi biblioteca →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="local-backend.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const toastStack = document.getElementById('toastStack');
+  function toast(msg, type){
+    const el = document.createElement('div');
+    el.className = 'toast' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+    el.textContent = msg;
+    toastStack.appendChild(el);
+    setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s ease'; setTimeout(()=>el.remove(),260); }, 3400);
+  }
+  window.contigoToast = toast;
+
+  let profile = null;
+
+  async function init(){
+    profile = await contigoGetSessionProfile();
+    if(!profile){
+      toast('Debes iniciar sesión para completar tu pago.', 'error');
+      window.location.href = 'index.html';
+      return;
+    }
+
+    document.getElementById('adminBadge').classList.toggle('hidden', profile.role !== 'admin');
+    document.getElementById('paidBadge').classList.toggle('hidden', !(profile.has_paid || profile.role === 'admin'));
+    document.getElementById('btnLogout').classList.remove('hidden');
+    document.getElementById('adminQrPanel').classList.toggle('hidden', profile.role !== 'admin');
+
+    const courseTitle = sessionStorage.getItem('contigo_selected_course');
+    const coursePrice = sessionStorage.getItem('contigo_selected_price') || '19.90';
+    document.getElementById('amountLabel').textContent = coursePrice.split('.')[0];
+    document.getElementById('courseSummary').textContent = courseTitle
+      ? `Estás a punto de obtener acceso a "${courseTitle}".`
+      : 'Estás a punto de obtener acceso a Conti-GO.';
+
+    if(profile.has_paid || profile.role === 'admin'){
+      document.getElementById('paymentFormWrap').classList.add('hidden');
+      document.getElementById('alreadyPaidState').classList.remove('hidden');
+    }
+
+    const qrUrl = await contigoGetPaymentQr();
+    if(qrUrl){
+      const img = document.getElementById('qrImage');
+      img.src = qrUrl;
+      img.classList.remove('hidden');
+      document.getElementById('qrPlaceholder').classList.add('hidden');
+    }
+  }
+
+  document.getElementById('btnConfirmPayment').addEventListener('click', async ()=>{
+    const btn = document.getElementById('btnConfirmPayment');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+
+    const courseTitle = sessionStorage.getItem('contigo_selected_course');
+    const price = parseFloat(sessionStorage.getItem('contigo_selected_price') || '19.90');
+    const note = document.getElementById('paymentNote').value.trim();
+
+    const result = await contigoCreatePaymentRequest({ courseTitle, amount: price, note });
+
+    btn.disabled = false; btn.textContent = 'Ya realicé el pago →';
+
+    if(!result.ok){
+      toast(result.message || 'No se pudo enviar tu pago.', 'error');
+      return;
+    }
+
+    document.getElementById('paymentFormWrap').classList.add('hidden');
+    document.getElementById('paymentSentState').classList.remove('hidden');
+    toast('Comprobante enviado. Esperando confirmación del admin.', 'success');
+  });
+
+  document.getElementById('btnUploadQr').addEventListener('click', async ()=>{
+    const input = document.getElementById('qrFileInput');
+    if(!input.files || !input.files[0]){ toast('Selecciona una imagen primero.', 'error'); return; }
+    const btn = document.getElementById('btnUploadQr');
+    btn.disabled = true; btn.textContent = 'Subiendo...';
+
+    const result = await contigoSetPaymentQr(input.files[0]);
+
+    btn.disabled = false; btn.textContent = 'Subir nuevo QR';
+
+    if(!result.ok){ toast(result.message || 'No se pudo subir el QR.', 'error'); return; }
+
+    const img = document.getElementById('qrImage');
+    img.src = result.url;
+    img.classList.remove('hidden');
+    document.getElementById('qrPlaceholder').classList.add('hidden');
+    toast('QR de pago actualizado.', 'success');
+  });
+
+  document.getElementById('btnLogout').addEventListener('click', async ()=>{
+    await contigoLogout();
+    window.location.href = 'index.html';
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

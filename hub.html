@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi Biblioteca | Conti-GO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<header class="navbar">
+  <div class="container navbar-inner">
+    <a href="index.html" class="logo"><span class="logo-mark"></span>Conti<span class="accent">-GO</span></a>
+    <nav class="nav-links">
+      <a href="index.html">Catálogo</a>
+    </nav>
+    <div class="navbar-actions">
+      <span id="adminBadge" class="admin-badge hidden">Admin</span>
+      <span id="paidBadge" class="paid-badge hidden">Acceso activo</span>
+      <button id="btnLogout" class="btn btn-outline btn-sm hidden">Cerrar Sesión</button>
+    </div>
+  </div>
+</header>
+
+<section class="section-border biblioteca-hero" style="padding-bottom:40px">
+  <div class="container">
+    <span class="eyebrow">/ Tu biblioteca</span>
+    <h1 class="section-title" style="font-size:clamp(1.9rem,3.4vw,2.6rem)">Estantería de <span class="accent-italic">masterclasses</span></h1>
+    <p id="heroSub" style="color:var(--text-dim);max-width:560px">Cargando tu acceso...</p>
+  </div>
+</section>
+
+<!-- BLOQUEADO (sin pago) -->
+<section id="lockedState" class="section-border hidden">
+  <div class="container">
+    <div class="locked-box">
+      <span class="locked-icon">🔒</span>
+      <h2>Aún no tienes acceso activo</h2>
+      <p>Completa tu pago para desbloquear tu biblioteca de masterclasses con acceso de por vida.</p>
+      <a href="pago.html" class="btn btn-primary" style="margin-top:18px">Completar pago →</a>
+    </div>
+  </div>
+</section>
+
+<!-- PANEL ADMIN: bandeja de pagos -->
+<section id="adminInboxSection" class="section-border hidden">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">/ Zona del administrador</span>
+      <h2 class="section-title">Bandeja de pagos</h2>
+      <p>Aquí llegan los comprobantes enviados por los estudiantes. Confirma un pago para activar su acceso automáticamente.</p>
+    </div>
+    <div id="inboxList" class="inbox-list"></div>
+  </div>
+</section>
+
+<!-- BIBLIOTECA -->
+<section id="libraryState" class="section-border hidden">
+  <div class="container">
+    <div class="library-head">
+      <div class="section-head" style="margin-bottom:0">
+        <span class="eyebrow">/ Catálogo desbloqueado</span>
+        <h2 class="section-title">Tus masterclasses</h2>
+      </div>
+      <button id="btnAddCourse" class="btn btn-primary hidden">+ Agregar curso</button>
+    </div>
+    <div id="shelfGrid" class="shelf-grid"></div>
+  </div>
+</section>
+
+<!-- MODAL: nuevo curso (admin) -->
+<div class="modal-overlay hidden" id="courseModal">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Nuevo curso</h2>
+    <p class="modal-sub">Se agregará a la biblioteca de todos los estudiantes con acceso.</p>
+    <form id="courseForm">
+      <label>Título del curso</label>
+      <input type="text" id="courseTitle" required placeholder="Ej: Diseño UX Avanzado">
+      <label>Categoría</label>
+      <input type="text" id="courseCat" required placeholder="Ej: Diseño">
+      <label>Instructor</label>
+      <input type="text" id="courseInstructor" required placeholder="Nombre del instructor">
+      <label>Nivel</label>
+      <input type="text" id="courseLevel" required placeholder="Ej: Intermedio">
+      <label>Descripción breve</label>
+      <input type="text" id="courseDesc" required placeholder="Una línea sobre el curso">
+      <button type="submit" class="btn btn-primary full">Crear curso</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: nuevo video (admin) -->
+<div class="modal-overlay hidden" id="videoModal">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Agregar video</h2>
+    <p class="modal-sub" id="videoModalCourse"></p>
+    <form id="videoForm">
+      <label>Título del video</label>
+      <input type="text" id="videoTitle" required placeholder="Ej: Clase 1 - Introducción">
+      <label>Link del video</label>
+      <input type="text" id="videoUrl" required placeholder="URL de YouTube, Vimeo o Supabase Storage">
+      <button type="submit" class="btn btn-primary full">Agregar video</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: reproductor -->
+<div class="modal-overlay hidden" id="playerModal">
+  <div class="modal player-modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2 id="playerTitle">Video</h2>
+    <div class="player-frame" id="playerFrame"></div>
+  </div>
+</div>
+
+<script src="local-backend.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const toastStack = document.getElementById('toastStack');
+  function toast(msg, type){
+    const el = document.createElement('div');
+    el.className = 'toast' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+    el.textContent = msg;
+    toastStack.appendChild(el);
+    setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s ease'; setTimeout(()=>el.remove(),260); }, 3400);
+  }
+  window.contigoToast = toast;
+
+  function open(modal){ modal.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+  function close(modal){ modal.classList.add('hidden'); document.body.style.overflow=''; }
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>{
+    document.querySelectorAll('.modal-overlay').forEach(close);
+  }));
+  document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click', (e)=>{ if(e.target===m) close(m); }));
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') document.querySelectorAll('.modal-overlay').forEach(close); });
+
+  let profile = null;
+  let isAdmin = false;
+
+  function embedUrl(url){
+    if(/youtube\.com\/watch\?v=/.test(url)) return url.replace('watch?v=','embed/');
+    if(/youtu\.be\//.test(url)) return url.replace('youtu.be/','www.youtube.com/embed/');
+    if(/vimeo\.com\//.test(url)) return url.replace('vimeo.com/','player.vimeo.com/video/');
+    return url;
+  }
+
+  function renderInbox(payments){
+    const list = document.getElementById('inboxList');
+    if(!payments.length){
+      list.innerHTML = '<p class="hint">No hay mensajes de pago todavía.</p>';
+      return;
+    }
+    list.innerHTML = payments.map(p=>`
+      <div class="inbox-item ${p.status === 'completado' ? 'is-done' : ''}" data-id="${p.id}" data-user="${p.user_id}">
+        <div class="inbox-main">
+          <strong>${p.email}</strong>
+          <span>${p.course_title || 'Acceso Conti-GO'} · S/ ${Number(p.amount).toFixed(2)}</span>
+          ${p.note ? `<span class="inbox-note">Ref: ${p.note}</span>` : ''}
+          <span class="inbox-date">${new Date(p.created_at).toLocaleString('es-PE')}</span>
+        </div>
+        <div class="inbox-actions">
+          <span class="inbox-status">${p.status === 'completado' ? '✓ Completado' : 'Pendiente'}</span>
+          ${p.status !== 'completado' ? `<button class="btn btn-primary btn-sm inbox-confirm">Marcar completado</button>` : ''}
+        </div>
+      </div>`).join('');
+
+    list.querySelectorAll('.inbox-confirm').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        const item = e.target.closest('.inbox-item');
+        btn.disabled = true; btn.textContent = 'Confirmando...';
+        const result = await contigoConfirmPayment(item.dataset.id, item.dataset.user);
+        if(!result.ok){ toast(result.message,'error'); btn.disabled=false; btn.textContent='Marcar completado'; return; }
+        toast('Pago confirmado. Acceso activado para el estudiante.', 'success');
+        await loadInbox();
+      });
+    });
+  }
+
+  async function loadInbox(){
+    const payments = await contigoListPayments();
+    renderInbox(payments);
+  }
+
+  function renderShelf(courses){
+    const grid = document.getElementById('shelfGrid');
+    if(!courses.length){
+      grid.innerHTML = '<p class="hint">Aún no hay cursos publicados en la biblioteca.</p>';
+      return;
+    }
+    grid.innerHTML = courses.map(c => `
+      <div class="shelf-card" data-course="${c.id}">
+        <div class="shelf-spine"></div>
+        <div class="shelf-content">
+          <div class="course-tag-row"><span class="course-cat">${c.cat}</span><span class="course-rating">${c.level}</span></div>
+          <h3>${c.title}</h3>
+          <p>${c.description || ''}</p>
+          <div class="course-meta"><span class="course-instructor">${c.instructor}</span><span>${(c.videos||[]).length} video(s)</span></div>
+
+          <div class="video-list">
+            ${(c.videos||[]).map(v => `
+              <div class="video-row" data-video="${v.id}">
+                <button class="video-play" data-url="${v.url}" data-title="${v.title}">▶ ${v.title}</button>
+                ${isAdmin ? `<button class="video-remove" title="Quitar video">✕</button>` : ''}
+              </div>`).join('') || '<p class="hint">Sin videos todavía.</p>'}
+          </div>
+
+          ${isAdmin ? `
+            <div class="shelf-admin-actions">
+              <button class="btn btn-outline btn-sm shelf-add-video">+ Video</button>
+              <button class="btn btn-outline btn-sm shelf-remove-course">Eliminar curso</button>
+            </div>` : ''}
+        </div>
+      </div>`).join('');
+
+    grid.querySelectorAll('.video-play').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.getElementById('playerTitle').textContent = btn.dataset.title;
+        document.getElementById('playerFrame').innerHTML = `<iframe src="${embedUrl(btn.dataset.url)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+        open(document.getElementById('playerModal'));
+      });
+    });
+
+    if(isAdmin){
+      grid.querySelectorAll('.video-remove').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const row = e.target.closest('.video-row');
+          const result = await contigoDeleteVideo(row.dataset.video);
+          if(!result.ok){ toast(result.message,'error'); return; }
+          toast('Video eliminado.');
+          await loadLibrary();
+        });
+      });
+      grid.querySelectorAll('.shelf-add-video').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const card = e.target.closest('.shelf-card');
+          document.getElementById('videoForm').dataset.course = card.dataset.course;
+          document.getElementById('videoModalCourse').textContent = card.querySelector('h3').textContent;
+          open(document.getElementById('videoModal'));
+        });
+      });
+      grid.querySelectorAll('.shelf-remove-course').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const card = e.target.closest('.shelf-card');
+          if(!confirm('¿Eliminar este curso y todos sus videos?')) return;
+          const result = await contigoDeleteCourse(card.dataset.course);
+          if(!result.ok){ toast(result.message,'error'); return; }
+          toast('Curso eliminado.');
+          await loadLibrary();
+        });
+      });
+    }
+  }
+
+  async function loadLibrary(){
+    const courses = await contigoListCourses();
+    renderShelf(courses);
+  }
+
+  document.getElementById('courseForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const result = await contigoAddCourse({
+      title: document.getElementById('courseTitle').value.trim(),
+      cat: document.getElementById('courseCat').value.trim(),
+      instructor: document.getElementById('courseInstructor').value.trim(),
+      level: document.getElementById('courseLevel').value.trim(),
+      description: document.getElementById('courseDesc').value.trim(),
+    });
+    if(!result.ok){ toast(result.message,'error'); return; }
+    close(document.getElementById('courseModal'));
+    e.target.reset();
+    toast('Curso creado.', 'success');
+    await loadLibrary();
+  });
+
+  document.getElementById('videoForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const courseId = e.target.dataset.course;
+    const result = await contigoAddVideo(courseId, {
+      title: document.getElementById('videoTitle').value.trim(),
+      url: document.getElementById('videoUrl').value.trim(),
+    });
+    if(!result.ok){ toast(result.message,'error'); return; }
+    close(document.getElementById('videoModal'));
+    e.target.reset();
+    toast('Video agregado.', 'success');
+    await loadLibrary();
+  });
+
+  document.getElementById('btnAddCourse').addEventListener('click', ()=>open(document.getElementById('courseModal')));
+
+  document.getElementById('btnLogout').addEventListener('click', async ()=>{
+    await contigoLogout();
+    window.location.href = 'index.html';
+  });
+
+  async function init(){
+    profile = await contigoGetSessionProfile();
+    if(!profile){
+      window.location.href = 'index.html';
+      return;
+    }
+    isAdmin = profile.role === 'admin';
+
+    document.getElementById('adminBadge').classList.toggle('hidden', !isAdmin);
+    document.getElementById('paidBadge').classList.toggle('hidden', !(profile.has_paid || isAdmin));
+    document.getElementById('btnLogout').classList.remove('hidden');
+
+    const hasAccess = isAdmin || profile.has_paid;
+    document.getElementById('heroSub').textContent = isAdmin
+      ? 'Administra el catálogo: agrega cursos, sube videos y confirma pagos.'
+      : (hasAccess ? 'Acceso de por vida a todo tu contenido desbloqueado.' : 'Completa tu pago para desbloquear tu biblioteca.');
+
+    if(!hasAccess){
+      document.getElementById('lockedState').classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('libraryState').classList.remove('hidden');
+    document.getElementById('btnAddCourse').classList.toggle('hidden', !isAdmin);
+    await loadLibrary();
+
+    if(isAdmin){
+      document.getElementById('adminInboxSection').classList.remove('hidden');
+      await loadInbox();
+      contigoSubscribePayments(()=>loadInbox());
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
